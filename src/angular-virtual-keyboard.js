@@ -11,7 +11,7 @@ angular.module('angular-virtual-keyboard', [])
 				[['Shift', 'Shift'], ['z', 'Z', '\u00e6', '\u00c6'], ['x', 'X'], ['c', 'C', '\u00a9', '\u00a2'], ['v', 'V'], ['b', 'B'], ['n', 'N', '\u00f1', '\u00d1'], ['m', 'M', '\u00b5'], [',', '<', '\u00e7', '\u00c7'], ['.', '>'], ['/', '?', '\u00bf'], ['Shift', 'Shift']],
 				[[' ', ' ', ' ', ' '], ['Alt', 'Alt']]
 			],
-		'lang': ['en'] }
+			'lang': ['en'] }
 	},
 	// deadkey
 	'deadkey': {
@@ -73,8 +73,15 @@ angular.module('angular-virtual-keyboard', [])
 			config.relative = config.relative === false ? false : VKI_CONFIG.relative;
 			config.keyCenter = config.keyCenter || VKI_CONFIG.keyCenter;
 			config.sizeAdj = config.sizeAdj === false ? false : VKI_CONFIG.sizeAdj;
-
-			var vki = new VKI(config, VKI_CONFIG.layout, VKI_CONFIG.deadkey, inputCallback);
+			config.numberPad = config.numberPad || VKI_CONFIG.numberPad;
+			config.showNumberPad = config.showNumberPad || VKI_CONFIG.showNumberPad;
+			config.showDeadBox = config.showDeadBox || VKI_CONFIG.showDeadBox;
+			config.activeTab = config.activeTab || VKI_CONFIG.activeTab;
+			config.displayVkiHeaderAction = config.displayVkiHeaderAction || VKI_CONFIG.displayVkiHeaderAction;
+			config.enterSubmit = config.enterSubmit || VKI_CONFIG.enterSubmit;
+			config.position = config.position || VKI_CONFIG.position;
+			config.keyboardLocation = config.keyboardLocation || VKI_CONFIG.keyboardLocation;
+			var vki = new VKI(config, VKI_CONFIG.layout, VKI_CONFIG.numPadLayout, VKI_CONFIG.deadkey, inputCallback);
 			vki.attachVki(element);
 		}
 	};
@@ -97,14 +104,43 @@ angular.module('angular-virtual-keyboard', [])
 				var UAParser = $injector.get('UAParser');
 				var results = new UAParser().getResult();
 				var isMobile = results.device.type === 'mobile' || results.device.type === 'tablet';
-                isMobile = isMobile || (results.os && (results.os.name === 'Android'));
-                isMobile = isMobile || (results.os && (results.os.name === 'iOS'));
+				isMobile = isMobile || (results.os && (results.os.name === 'Android'));
+				isMobile = isMobile || (results.os && (results.os.name === 'iOS'));
 				if (isMobile && scope.config.showInMobile !== true) {
 					return;
 				}
 			}
 
 			ngVirtualKeyboardService.attach(elements[0], scope.config, function() {
+				$timeout(function() {
+					ngModelCtrl.$setViewValue(elements[0].value);
+				});
+			});
+		}
+	};
+}]).directive('ngStaticVirtualKeyboard', ['ngVirtualKeyboardService', '$timeout', '$injector',
+function(ngVirtualKeyboardService, $timeout, $injector) {
+	return {
+		restrict: 'A',
+		require : '?ngModel',
+		link: function(scope, elements, attrs, ngModelCtrl) {
+			if(!ngModelCtrl){
+				return;
+			}
+
+			// Don't show virtual keyboard in mobile devices (default)
+			if ($injector.has('UAParser')) {
+				var UAParser = $injector.get('UAParser');
+				var results = new UAParser().getResult();
+				var isMobile = results.device.type === 'mobile' || results.device.type === 'tablet';
+				isMobile = isMobile || (results.os && (results.os.name === 'Android'));
+				isMobile = isMobile || (results.os && (results.os.name === 'iOS'));
+				if (isMobile) {
+					return;
+				}
+			}
+
+			ngVirtualKeyboardService.attach(elements[0], {} , function() {
 				$timeout(function() {
 					ngModelCtrl.$setViewValue(elements[0].value);
 				});

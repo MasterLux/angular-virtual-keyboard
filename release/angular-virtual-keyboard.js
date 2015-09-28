@@ -61,21 +61,21 @@
  *
  */
 
-var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
+var VKI = function(customConfig, layout, numPadLayout, deadKeys, keyInputCallback) {
   var self = this;
+
   var config = customConfig || {};
   self.keyInputCallback = keyInputCallback || function(){};
-
   this.VKI_version = "1.49";
   this.VKI_showVersion = config.showVersion !== undefined ? config.showVersion : false;
   this.VKI_target = false;
   this.VKI_shift = this.VKI_shiftlock = false;
   this.VKI_altgr = this.VKI_altgrlock = false;
   this.VKI_dead = false;
-  this.VKI_deadBox = true; // Show the dead keys checkbox
+  this.VKI_deadBox = config.showDeadBox != undefined ? config.showDeadBox : true; // Show the dead keys checkbox
   this.VKI_deadkeysOn = config.deadkeysOn !== undefined ? config.deadkeysOn : true;  // Turn dead keys on by default
   this.VKI_numberPad = config.numberPad !== undefined ? config.numberPad : false;  // Allow user to open and close the number pad
-  this.VKI_numberPadOn = false;  // Show number pad by default
+  this.VKI_numberPadOn = config.showNumberPad !== undefined ? config.showNumberPad : false;  // Show number pad by default
   this.VKI_kts = this.VKI_kt = config.kt || 'US International';  // Default keyboard layout
   this.VKI_langAdapt = !config.kt;  // Use lang attribute of input to select keyboard (Will be used if no keyboard layout was defined in custom config)
   this.VKI_size = config.size >=1 && config.size <= 5 ? config.size : 3;  // Default keyboard size (1-5)
@@ -83,11 +83,13 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
   this.VKI_clearPasswords = false;  // Clear password fields on focus
   this.VKI_imageURI = config.imageURI !== undefined ? config.imageURI : "";  // If empty string, use imageless mode
   this.VKI_clickless = 0;  // 0 = disabled, > 0 = delay in ms
-  this.VKI_activeTab = 0;  // Tab moves to next: 1 = element, 2 = keyboard enabled element
+  this.VKI_activeTab = isNaN(config.activeTab) ? 0 : config.activeTab;  // Tab moves to next: 1 = element, 2 = keyboard enabled element
   this.VKI_keyCenter = config.keyCenter || 3;
   this.VKI_forcePosition = config.forcePosition || false;
   this.VKI_relative = config.relative === false ? false : true;
-
+  this.VKI_displayHeader = config.displayVkiHeaderAction === false ? false : true;
+  this.VKI_positionOption = config.position instanceof Object ? config.position : {};
+  this.VKI_keyboardLocation = config.keyboardLocation != null ? config.keyboardLocation : null;
   this.VKI_isIE = /*@cc_on!@*/false;
   this.VKI_isIE6 = /*@if(@_jscript_version == 5.6)!@end@*/false;
   this.VKI_isIElt8 = /*@if(@_jscript_version < 5.8)!@end@*/false;
@@ -175,13 +177,18 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
 
 
   /* ***** Layout Number Pad ************************************* */
-  this.VKI_numpad = [
-    [["$"], ["\u00a3"], ["\u20ac"], ["\u00a5"]],
-    [["7"], ["8"], ["9"], ["/"]],
-    [["4"], ["5"], ["6"], ["*"]],
-    [["1"], ["2"], ["3"], ["-"]],
-    [["0"], ["."], ["="], ["+"]]
-  ];
+  if (numPadLayout != null) {
+    this.VKI_numpad = numPadLayout;
+  } else {
+    this.VKI_numpad = [
+      [["$"], ["\u00a3"], ["\u20ac"], ["\u00a5"]],
+      [["7"], ["8"], ["9"], ["/"]],
+      [["4"], ["5"], ["6"], ["*"]],
+      [["1"], ["2"], ["3"], ["-"]],
+      [["0"], ["."], ["="], ["+"]]
+    ];
+  }
+
 
   function hasSelectionStartEnd(elem) {
     var hasSelection = false;
@@ -200,16 +207,16 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
     if (elem.getAttribute("VKI_attached")) return false;
     if (self.VKI_imageURI) {
       var keybut = document.createElement('img');
-          keybut.src = self.VKI_imageURI;
-          keybut.alt = self.VKI_i18n['01'];
-          keybut.className = "keyboardInputInitiator";
-          keybut.title = self.VKI_i18n['01'];
-          keybut.elem = elem;
-          keybut.onclick = function(e) {
-            e = e || event;
-            if (e.stopPropagation) { e.stopPropagation(); } else e.cancelBubble = true;
-            self.VKI_show(this.elem);
-          };
+      keybut.src = self.VKI_imageURI;
+      keybut.alt = self.VKI_i18n['01'];
+      keybut.className = "keyboardInputInitiator";
+      keybut.title = self.VKI_i18n['01'];
+      keybut.elem = elem;
+      keybut.onclick = function(e) {
+        e = e || event;
+        if (e.stopPropagation) { e.stopPropagation(); } else e.cancelBubble = true;
+        self.VKI_show(this.elem);
+      };
       elem.parentNode.insertBefore(keybut, (elem.dir == "rtl") ? elem : elem.nextSibling);
     } else {
       elem.onfocus = function() {
@@ -306,194 +313,208 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
     return alert('No keyboard named "' + this.VKI_kt + '"');
 
   this.VKI_langCode = {};
-  var thead = document.createElement('thead');
+  var vkiNumberOfLine = 5;
+  if (this.VKI_displayHeader) {
+    vkiNumberOfLine = 4;
+    var thead = document.createElement('thead');
     var tr = document.createElement('tr');
-      var th = document.createElement('th');
-          th.colSpan = "2";
+    var th = document.createElement('th');
+    th.colSpan = "2";
 
-        if (self.VKI_showKbSelect) {
-          var kbSelect = document.createElement('div');
-              kbSelect.title = this.VKI_i18n['02'];
-            VKI_addListener(kbSelect, 'click', function() {
-              var ol = this.getElementsByTagName('ol')[0];
-              if (!ol.style.display) {
-                  ol.style.display = "block";
-                var li = ol.getElementsByTagName('li');
-                for (var x = 0, scr = 0; x < li.length; x++) {
-                  if (VKI_kt == li[x].firstChild.nodeValue) {
-                    li[x].className = "selected";
-                    scr = li[x].offsetTop - li[x].offsetHeight * 2;
-                  } else li[x].className = "";
-                } setTimeout(function() { ol.scrollTop = scr; }, 0);
-              } else ol.style.display = "";
-            }, false);
-              kbSelect.appendChild(document.createTextNode(this.VKI_kt));
-              kbSelect.appendChild(document.createTextNode(this.VKI_isIElt8 ? " \u2193" : " \u25be"));
-              kbSelect.langCount = 0;
-            var ol = document.createElement('ol');
-              for (ktype in this.VKI_layout) {
-                if (typeof this.VKI_layout[ktype] == "object") {
-                  if (!this.VKI_layout[ktype].lang) this.VKI_layout[ktype].lang = [];
-                  for (var x = 0; x < this.VKI_layout[ktype].lang.length; x++)
-                    this.VKI_langCode[this.VKI_layout[ktype].lang[x].toLowerCase().replace(/-/g, "_")] = ktype;
-                  var li = document.createElement('li');
-                      li.title = this.VKI_layout[ktype].name;
-                    VKI_addListener(li, 'click', function(e) {
-                      e = e || event;
-                      if (e.stopPropagation) { e.stopPropagation(); } else e.cancelBubble = true;
-                      this.parentNode.style.display = "";
-                      self.VKI_kts = self.VKI_kt = kbSelect.firstChild.nodeValue = this.firstChild.nodeValue;
-                      self.VKI_buildKeys();
-                      self.VKI_position(true);
-                    }, false);
-                    VKI_mouseEvents(li);
-                      li.appendChild(document.createTextNode(ktype));
-                    ol.appendChild(li);
-                  kbSelect.langCount++;
-                }
-              } kbSelect.appendChild(ol);
-            if (kbSelect.langCount > 1) th.appendChild(kbSelect);
-          this.VKI_langCode.index = [];
-          for (prop in this.VKI_langCode)
-            if (prop != "index" && typeof this.VKI_langCode[prop] == "string")
-              this.VKI_langCode.index.push(prop);
-          this.VKI_langCode.index.sort();
-          this.VKI_langCode.index.reverse();
-        }
-
-        if (this.VKI_numberPad) {
-          var span = document.createElement('span');
-              span.appendChild(document.createTextNode("#"));
-              span.title = this.VKI_i18n['00'];
-            VKI_addListener(span, 'click', function() {
-              kbNumpad.style.display = (!kbNumpad.style.display) ? "none" : "";
-              self.VKI_position(true);
-              self.VKI_target.focus();
-            }, false);
-            VKI_mouseEvents(span);
-            th.appendChild(span);
-        }
-
-        this.VKI_kbsize = function(e) {
-          self.VKI_size = Math.min(5, Math.max(1, self.VKI_size));
-          self.VKI_keyboard.className = self.VKI_keyboard.className.replace(/ ?keyboardInputSize\d ?/, "");
-          if (self.VKI_size != 2) self.VKI_keyboard.className += " keyboardInputSize" + self.VKI_size;
-          self.VKI_position(true);
-          if (self.VKI_isOpera) self.VKI_keyboard.reflow();
-        };
-        if (this.VKI_sizeAdj) {
-          var small = document.createElement('small');
-              small.title = this.VKI_i18n['10'];
-            VKI_addListener(small, 'click', function() {
-              --self.VKI_size;
-              self.VKI_kbsize();
-              self.VKI_target.focus();
-            }, false);
-            VKI_mouseEvents(small);
-              small.appendChild(document.createTextNode(this.VKI_isIElt8 ? "\u2193" : "\u21d3"));
-            th.appendChild(small);
-          var big = document.createElement('big');
-              big.title = this.VKI_i18n['11'];
-            VKI_addListener(big, 'click', function() {
-              ++self.VKI_size;
-              self.VKI_kbsize();
-              self.VKI_target.focus();
-            }, false);
-            VKI_mouseEvents(big);
-              big.appendChild(document.createTextNode(this.VKI_isIElt8 ? "\u2191" : "\u21d1"));
-            th.appendChild(big);
-        }
-
-        var span = document.createElement('span');
-            span.appendChild(document.createTextNode(this.VKI_i18n['07']));
-            span.title = this.VKI_i18n['08'];
-          VKI_addListener(span, 'click', function() {
-            self.VKI_target.value = "";
-            self.VKI_target.focus();
-            self.keyInputCallback();
-            return false;
+    if (self.VKI_showKbSelect) {
+      var kbSelect = document.createElement('div');
+      kbSelect.title = this.VKI_i18n['02'];
+      VKI_addListener(kbSelect, 'click', function () {
+        var ol = this.getElementsByTagName('ol')[0];
+        if (!ol.style.display) {
+          ol.style.display = "block";
+          var li = ol.getElementsByTagName('li');
+          for (var x = 0, scr = 0; x < li.length; x++) {
+            if (VKI_kt == li[x].firstChild.nodeValue) {
+              li[x].className = "selected";
+              scr = li[x].offsetTop - li[x].offsetHeight * 2;
+            } else li[x].className = "";
+          }
+          setTimeout(function () {
+            ol.scrollTop = scr;
+          }, 0);
+        } else ol.style.display = "";
+      }, false);
+      kbSelect.appendChild(document.createTextNode(this.VKI_kt));
+      kbSelect.appendChild(document.createTextNode(this.VKI_isIElt8 ? " \u2193" : " \u25be"));
+      kbSelect.langCount = 0;
+      var ol = document.createElement('ol');
+      for (ktype in this.VKI_layout) {
+        if (typeof this.VKI_layout[ktype] == "object") {
+          if (!this.VKI_layout[ktype].lang) this.VKI_layout[ktype].lang = [];
+          for (var x = 0; x < this.VKI_layout[ktype].lang.length; x++)
+            this.VKI_langCode[this.VKI_layout[ktype].lang[x].toLowerCase().replace(/-/g, "_")] = ktype;
+          var li = document.createElement('li');
+          li.title = this.VKI_layout[ktype].name;
+          VKI_addListener(li, 'click', function (e) {
+            e = e || event;
+            if (e.stopPropagation) {
+              e.stopPropagation();
+            } else e.cancelBubble = true;
+            this.parentNode.style.display = "";
+            self.VKI_kts = self.VKI_kt = kbSelect.firstChild.nodeValue = this.firstChild.nodeValue;
+            self.VKI_buildKeys();
+            self.VKI_position(true);
           }, false);
-          VKI_mouseEvents(span);
-          th.appendChild(span);
+          VKI_mouseEvents(li);
+          li.appendChild(document.createTextNode(ktype));
+          ol.appendChild(li);
+          kbSelect.langCount++;
+        }
+      }
+      kbSelect.appendChild(ol);
+      if (kbSelect.langCount > 1) th.appendChild(kbSelect);
+      this.VKI_langCode.index = [];
+      for (prop in this.VKI_langCode)
+        if (prop != "index" && typeof this.VKI_langCode[prop] == "string")
+          this.VKI_langCode.index.push(prop);
+      this.VKI_langCode.index.sort();
+      this.VKI_langCode.index.reverse();
+    }
 
-        var strong = document.createElement('strong');
-            strong.appendChild(document.createTextNode('X'));
-            strong.title = this.VKI_i18n['06'];
-          VKI_addListener(strong, 'click', function() { self.VKI_close(true); }, false);
-          VKI_mouseEvents(strong);
-          th.appendChild(strong);
+    if (this.VKI_numberPad) {
+      var span = document.createElement('span');
+      span.appendChild(document.createTextNode("#"));
+      span.title = this.VKI_i18n['00'];
+      VKI_addListener(span, 'click', function () {
+        kbNumpad.style.display = (!kbNumpad.style.display) ? "none" : "";
+        self.VKI_position(true);
+        self.VKI_target.focus();
+      }, false);
+      VKI_mouseEvents(span);
+      th.appendChild(span);
+    }
 
-        tr.appendChild(th);
-      thead.appendChild(tr);
-  this.VKI_keyboard.appendChild(thead);
+
+    if (this.VKI_sizeAdj) {
+      var small = document.createElement('small');
+      small.title = this.VKI_i18n['10'];
+      VKI_addListener(small, 'click', function () {
+        --self.VKI_size;
+        self.VKI_kbsize();
+        self.VKI_target.focus();
+      }, false);
+      VKI_mouseEvents(small);
+      small.appendChild(document.createTextNode(this.VKI_isIElt8 ? "\u2193" : "\u21d3"));
+      th.appendChild(small);
+      var big = document.createElement('big');
+      big.title = this.VKI_i18n['11'];
+      VKI_addListener(big, 'click', function () {
+        ++self.VKI_size;
+        self.VKI_kbsize();
+        self.VKI_target.focus();
+      }, false);
+      VKI_mouseEvents(big);
+      big.appendChild(document.createTextNode(this.VKI_isIElt8 ? "\u2191" : "\u21d1"));
+      th.appendChild(big);
+    }
+
+    var span = document.createElement('span');
+    span.appendChild(document.createTextNode(this.VKI_i18n['07']));
+    span.title = this.VKI_i18n['08'];
+    VKI_addListener(span, 'click', function () {
+      self.VKI_target.value = "";
+      self.VKI_target.focus();
+      self.keyInputCallback();
+      return false;
+    }, false);
+    VKI_mouseEvents(span);
+    th.appendChild(span);
+
+    var strong = document.createElement('strong');
+    strong.appendChild(document.createTextNode('X'));
+    strong.title = this.VKI_i18n['06'];
+    VKI_addListener(strong, 'click', function () {
+      self.VKI_close(true);
+    }, false);
+    VKI_mouseEvents(strong);
+    th.appendChild(strong);
+
+    tr.appendChild(th);
+    thead.appendChild(tr);
+    this.VKI_keyboard.appendChild(thead);
+  }
+
+  this.VKI_kbsize = function (e) {
+    self.VKI_size = Math.min(vkiNumberOfLine, Math.max(1, self.VKI_size));
+    self.VKI_keyboard.className = self.VKI_keyboard.className.replace(/ ?keyboardInputSize\d ?/, "");
+    if (self.VKI_size != 2) self.VKI_keyboard.className += " keyboardInputSize" + self.VKI_size;
+    self.VKI_position(true);
+    if (self.VKI_isOpera) self.VKI_keyboard.reflow();
+  };
 
   var tbody = document.createElement('tbody');
-    var tr = document.createElement('tr');
-      var keyboardsArea = document.createElement('td');
-      keyboardsArea.className = 'keyboardsArea';
+  var tr = document.createElement('tr');
+  var keyboardsArea = document.createElement('td');
+  keyboardsArea.className = 'keyboardsArea';
 
-        var keyboardsTable = document.createElement('table');
-          var keyboardsTr = document.createElement('tr');
+  var keyboardsTable = document.createElement('table');
+  var keyboardsTr = document.createElement('tr');
 
-            /** keyboardInputText ***********************************************************/
-            var kbTextPad = document.createElement('td');
-            kbTextPad.className = 'keyboardInputTextPad';
-              var div = document.createElement('div');
+  /** keyboardInputText ***********************************************************/
+  var kbTextPad = document.createElement('td');
+  kbTextPad.className = 'keyboardInputTextPad';
+  var div = document.createElement('div');
 
-              if (this.VKI_deadBox) {
-                var label = document.createElement('label');
-                  var checkbox = document.createElement('input');
-                      checkbox.type = "checkbox";
-                      checkbox.title = this.VKI_i18n['03'] + ": " + ((this.VKI_deadkeysOn) ? this.VKI_i18n['04'] : this.VKI_i18n['05']);
-                      checkbox.defaultChecked = this.VKI_deadkeysOn;
-                    VKI_addListener(checkbox, 'click', function() {
-                      this.title = self.VKI_i18n['03'] + ": " + ((this.checked) ? self.VKI_i18n['04'] : self.VKI_i18n['05']);
-                      self.VKI_modify("");
-                      return true;
-                    }, false);
-                    label.appendChild(checkbox);
-                      checkbox.checked = this.VKI_deadkeysOn;
-                  div.appendChild(label);
-                this.VKI_deadkeysOn = checkbox;
-              } else this.VKI_deadkeysOn.checked = this.VKI_deadkeysOn;
+  if (this.VKI_deadBox) {
+    var label = document.createElement('label');
+    var checkbox = document.createElement('input');
+    checkbox.type = "checkbox";
+    checkbox.title = this.VKI_i18n['03'] + ": " + ((this.VKI_deadkeysOn) ? this.VKI_i18n['04'] : this.VKI_i18n['05']);
+    checkbox.defaultChecked = this.VKI_deadkeysOn;
+    VKI_addListener(checkbox, 'click', function() {
+      this.title = self.VKI_i18n['03'] + ": " + ((this.checked) ? self.VKI_i18n['04'] : self.VKI_i18n['05']);
+      self.VKI_modify("");
+      return true;
+    }, false);
+    label.appendChild(checkbox);
+    checkbox.checked = this.VKI_deadkeysOn;
+    div.appendChild(label);
+    this.VKI_deadkeysOn = checkbox;
+  } else this.VKI_deadkeysOn.checked = this.VKI_deadkeysOn;
 
-              if (this.VKI_showVersion) {
-                var vr = document.createElement('var');
-                    vr.title = this.VKI_i18n['09'] + " " + this.VKI_version;
-                    vr.appendChild(document.createTextNode("v" + this.VKI_version));
-                  div.appendChild(vr);
-              }
-            kbTextPad.appendChild(div);
-            /*********************************************************** keyboardInputText **/
+  if (this.VKI_showVersion) {
+    var vr = document.createElement('var');
+    vr.title = this.VKI_i18n['09'] + " " + this.VKI_version;
+    vr.appendChild(document.createTextNode("v" + this.VKI_version));
+    div.appendChild(vr);
+  }
+  kbTextPad.appendChild(div);
+  /*********************************************************** keyboardInputText **/
 
-            /** keyboardInputNumpad ***********************************************************/
-            var kbNumpad = document.createElement('td');
-                kbNumpad.className = "keyboardInputNumpad";
-            // kbNumpad.id = "keyboardInputNumpad";
-              if (!this.VKI_numberPadOn) kbNumpad.style.display = "none";
-              var ntable = document.createElement('table');
-              ntable.cellSpacing = "0";
-                var ntbody = document.createElement('tbody');
-                for (var x = 0; x < this.VKI_numpad.length; x++) {
-                  var ntr = document.createElement('tr');
-                    for (var y = 0; y < this.VKI_numpad[x].length; y++) {
-                      var ntd = document.createElement('td');
-                        VKI_addListener(ntd, 'click', VKI_keyClick, false);
-                        VKI_mouseEvents(ntd);
-                          ntd.appendChild(document.createTextNode(this.VKI_numpad[x][y]));
-                        ntr.appendChild(ntd);
-                    }
-                  ntbody.appendChild(ntr);
-                }
-              ntable.appendChild(ntbody);
-            kbNumpad.appendChild(ntable);
-            /*********************************************************** keyboardInputNumpad **/
-          keyboardsTr.appendChild(kbTextPad);
-          keyboardsTr.appendChild(kbNumpad);
+  /** keyboardInputNumpad ***********************************************************/
+  var kbNumpad = document.createElement('td');
+  kbNumpad.className = "keyboardInputNumpad";
+  // kbNumpad.id = "keyboardInputNumpad";
+  if (!this.VKI_numberPadOn) kbNumpad.style.display = "none";
+  var ntable = document.createElement('table');
+  ntable.cellSpacing = "0";
+  var ntbody = document.createElement('tbody');
+  for (var x = 0; x < this.VKI_numpad.length; x++) {
+    var ntr = document.createElement('tr');
+    for (var y = 0; y < this.VKI_numpad[x].length; y++) {
+      var ntd = document.createElement('td');
+      VKI_addListener(ntd, 'click', VKI_keyClick, false);
+      VKI_mouseEvents(ntd);
+      ntd.appendChild(document.createTextNode(this.VKI_numpad[x][y]));
+      ntr.appendChild(ntd);
+    }
+    ntbody.appendChild(ntr);
+  }
+  ntable.appendChild(ntbody);
+  kbNumpad.appendChild(ntable);
+  /*********************************************************** keyboardInputNumpad **/
+  keyboardsTr.appendChild(kbTextPad);
+  keyboardsTr.appendChild(kbNumpad);
 
-        keyboardsTable.appendChild(keyboardsTr);
-      keyboardsArea.appendChild(keyboardsTable);
-    tr.appendChild(keyboardsArea);
+  keyboardsTable.appendChild(keyboardsTr);
+  keyboardsArea.appendChild(keyboardsTable);
+  tr.appendChild(keyboardsArea);
   tbody.appendChild(tr);
   this.VKI_keyboard.appendChild(tbody);
 
@@ -554,103 +575,103 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
 
     for (var x = 0, hasDeadKey = false, lyt; lyt = this.VKI_layout[this.VKI_kt].keys[x++];) {
       var table = document.createElement('table');
-          table.cellSpacing = "0";
-        if (lyt.length <= this.VKI_keyCenter) table.className = "keyboardInputCenter";
-        var tbody = document.createElement('tbody');
-          var tr = document.createElement('tr');
-            for (var y = 0, lkey; lkey = lyt[y++];) {
-              var td = document.createElement('td');
-                if (this.VKI_symbol[lkey[0]]) {
-                  var text = this.VKI_symbol[lkey[0]].split("\n");
-                  var small = document.createElement('small');
-                      small.setAttribute('char', lkey[0]);
-                  for (var z = 0; z < text.length; z++) {
-                    if (z) small.appendChild(document.createElement("br"));
-                    small.appendChild(document.createTextNode(text[z]));
-                  } td.appendChild(small);
-                } else td.appendChild(document.createTextNode(lkey[0] || "\xa0"));
+      table.cellSpacing = "0";
+      if (lyt.length <= this.VKI_keyCenter) table.className = "keyboardInputCenter";
+      var tbody = document.createElement('tbody');
+      var tr = document.createElement('tr');
+      for (var y = 0, lkey; lkey = lyt[y++];) {
+        var td = document.createElement('td');
+        if (this.VKI_symbol[lkey[0]]) {
+          var text = this.VKI_symbol[lkey[0]].split("\n");
+          var small = document.createElement('small');
+          small.setAttribute('char', lkey[0]);
+          for (var z = 0; z < text.length; z++) {
+            if (z) small.appendChild(document.createElement("br"));
+            small.appendChild(document.createTextNode(text[z]));
+          } td.appendChild(small);
+        } else td.appendChild(document.createTextNode(lkey[0] || "\xa0"));
 
-                var className = [];
-                if (this.VKI_deadkeysOn.checked)
-                  for (key in this.VKI_deadkey)
-                    if (key === lkey[0]) { className.push("deadkey"); break; }
-                if (lyt.length > this.VKI_keyCenter && y == lyt.length) className.push("last");
-                if (lkey[0] == " " || lkey[1] == " ") className.push("space");
-                  td.className = className.join(" ");
+        var className = [];
+        if (this.VKI_deadkeysOn.checked)
+          for (key in this.VKI_deadkey)
+            if (key === lkey[0]) { className.push("deadkey"); break; }
+        if (lyt.length > this.VKI_keyCenter && y == lyt.length) className.push("last");
+        if (lkey[0] == " " || lkey[1] == " ") className.push("space");
+        td.className = className.join(" ");
 
-                switch (lkey[1]) {
-                  case "Caps": case "Shift":
-                  case "Alt": case "AltGr": case "AltLk":
-                    VKI_addListener(td, 'click', (function(type) { return function() { self.VKI_modify(type); return false; }})(lkey[1]), false);
-                    break;
-                  case "Tab":
-                    VKI_addListener(td, 'click', function() {
-                      if (self.VKI_activeTab) {
-                        if (self.VKI_target.form) {
-                          var target = self.VKI_target, elems = target.form.elements;
-                          self.VKI_close(false);
-                          for (var z = 0, me = false, j = -1; z < elems.length; z++) {
-                            if (j == -1 && elems[z].getAttribute("VKI_attached")) j = z;
-                            if (me) {
-                              if (self.VKI_activeTab == 1 && elems[z]) break;
-                              if (elems[z].getAttribute("VKI_attached")) break;
-                            } else if (elems[z] == target) me = true;
-                          } if (z == elems.length) z = Math.max(j, 0);
-                          if (elems[z].getAttribute("VKI_attached")) {
-                            self.VKI_show(elems[z]);
-                          } else elems[z].focus();
-                        } else self.VKI_target.focus();
-                      } else self.VKI_insert("\t");
-                      return false;
-                    }, false);
-                    break;
-                  case "Bksp":
-                    VKI_addListener(td, 'click', function() {
-                      self.VKI_target.focus();
-                      if (self.VKI_target.setSelectionRange && hasSelectionStartEnd(self.VKI_target) && !self.VKI_target.readOnly) {
-                        var rng = [self.VKI_target.selectionStart, self.VKI_target.selectionEnd];
-                        if (rng[0] < rng[1]) rng[0]++;
-                        self.VKI_target.value = self.VKI_target.value.substr(0, rng[0] - 1) + self.VKI_target.value.substr(rng[1]);
-                        self.VKI_target.setSelectionRange(rng[0] - 1, rng[0] - 1);
-                      } else if (self.VKI_target.createTextRange && !self.VKI_target.readOnly) {
-                        try {
-                          self.VKI_target.range.select();
-                        } catch(e) { self.VKI_target.range = document.selection.createRange(); }
-                        if (!self.VKI_target.range.text.length) self.VKI_target.range.moveStart('character', -1);
-                        self.VKI_target.range.text = "";
-                      } else self.VKI_target.value = self.VKI_target.value.substr(0, self.VKI_target.value.length - 1);
-                      if (self.VKI_shift) self.VKI_modify("Shift");
-                      if (self.VKI_altgr) self.VKI_modify("AltGr");
-                      self.VKI_target.focus();
-                      self.keyInputCallback();
-                      return true;
-                    }, false);
-                    break;
-                  case "Enter":
-                    VKI_addListener(td, 'click', function() {
-                      if (self.VKI_target.nodeName != "TEXTAREA") {
-                        if (typeof self.VKI_enterSubmit === 'function') {
-                          self.VKI_enterSubmit.apply({}, [self.VKI_target.value]);
-                        } else if (self.VKI_enterSubmit && self.VKI_target.form) {
-                          for (var z = 0, subm = false; z < self.VKI_target.form.elements.length; z++)
-                            if (self.VKI_target.form.elements[z].type == "submit") subm = true;
-                          if (!subm) self.VKI_target.form.submit();
-                        }
-                        self.VKI_close(false);
-                      } else self.VKI_insert("\n");
-                      return true;
-                    }, false);
-                    break;
-                  default:
-                    VKI_addListener(td, 'click', VKI_keyClick, false);
+        switch (lkey[1]) {
+          case "Caps": case "Shift":
+          case "Alt": case "AltGr": case "AltLk":
+          VKI_addListener(td, 'click', (function(type) { return function() { self.VKI_modify(type); return false; }})(lkey[1]), false);
+          break;
+          case "Tab":
+            VKI_addListener(td, 'click', function() {
+              if (self.VKI_activeTab) {
+                if (self.VKI_target.form) {
+                  var target = self.VKI_target, elems = target.form.elements;
+                  self.VKI_close(false);
+                  for (var z = 0, me = false, j = -1; z < elems.length; z++) {
+                    if (j == -1 && elems[z].getAttribute("VKI_attached")) j = z;
+                    if (me) {
+                      if (self.VKI_activeTab == 1 && elems[z]) break;
+                      if (elems[z].getAttribute("VKI_attached")) break;
+                    } else if (elems[z] == target) me = true;
+                  } if (z == elems.length) z = Math.max(j, 0);
+                  if (elems[z].getAttribute("VKI_attached")) {
+                    self.VKI_show(elems[z]);
+                  } else elems[z].focus();
+                } else self.VKI_target.focus();
+              } else self.VKI_insert("\t");
+              return false;
+            }, false);
+            break;
+          case "Bksp":
+            VKI_addListener(td, 'click', function() {
+              self.VKI_target.focus();
+              if (self.VKI_target.setSelectionRange && hasSelectionStartEnd(self.VKI_target) && !self.VKI_target.readOnly) {
+                var rng = [self.VKI_target.selectionStart, self.VKI_target.selectionEnd];
+                if (rng[0] < rng[1]) rng[0]++;
+                self.VKI_target.value = self.VKI_target.value.substr(0, rng[0] - 1) + self.VKI_target.value.substr(rng[1]);
+                self.VKI_target.setSelectionRange(rng[0] - 1, rng[0] - 1);
+              } else if (self.VKI_target.createTextRange && !self.VKI_target.readOnly) {
+                try {
+                  self.VKI_target.range.select();
+                } catch(e) { self.VKI_target.range = document.selection.createRange(); }
+                if (!self.VKI_target.range.text.length) self.VKI_target.range.moveStart('character', -1);
+                self.VKI_target.range.text = "";
+              } else self.VKI_target.value = self.VKI_target.value.substr(0, self.VKI_target.value.length - 1);
+              if (self.VKI_shift) self.VKI_modify("Shift");
+              if (self.VKI_altgr) self.VKI_modify("AltGr");
+              self.VKI_target.focus();
+              self.keyInputCallback();
+              return true;
+            }, false);
+            break;
+          case "Enter":
+            VKI_addListener(td, 'click', function() {
+              if (self.VKI_target.nodeName != "TEXTAREA") {
+                if (typeof self.VKI_enterSubmit === 'function') {
+                  self.VKI_enterSubmit.apply({}, [self.VKI_target.value]);
+                } else if (self.VKI_enterSubmit && self.VKI_target.form) {
+                  for (var z = 0, subm = false; z < self.VKI_target.form.elements.length; z++)
+                    if (self.VKI_target.form.elements[z].type == "submit") subm = true;
+                  if (!subm) self.VKI_target.form.submit();
+                }
+                self.VKI_close(false);
+              } else self.VKI_insert("\n");
+              return true;
+            }, false);
+            break;
+          default:
+            VKI_addListener(td, 'click', VKI_keyClick, false);
 
-                } VKI_mouseEvents(td);
-                tr.appendChild(td);
-              for (var z = 0; z < 4; z++)
-                if (this.VKI_deadkey[lkey[z] = lkey[z] || ""]) hasDeadKey = true;
-            } tbody.appendChild(tr);
-          table.appendChild(tbody);
-        container.appendChild(table);
+        } VKI_mouseEvents(td);
+        tr.appendChild(td);
+        for (var z = 0; z < 4; z++)
+          if (this.VKI_deadkey[lkey[z] = lkey[z] || ""]) hasDeadKey = true;
+      } tbody.appendChild(tr);
+      table.appendChild(tbody);
+      container.appendChild(table);
     }
     if (this.VKI_deadBox)
       this.VKI_deadkeysOn.style.display = (hasDeadKey) ? "inline" : "none";
@@ -710,14 +731,14 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
           case "Bksp":
             self.VKI_target.focus();
           case "Enter":
-          break;
+            break;
           default:
             if (type) {
               tds[y].removeChild(tds[y].firstChild);
               if (this.VKI_symbol[lkey[vchar]]) {
                 var text = this.VKI_symbol[lkey[vchar]].split("\n");
                 var small = document.createElement('small');
-                    small.setAttribute('char', lkey[vchar]);
+                small.setAttribute('char', lkey[vchar]);
                 for (var z = 0; z < text.length; z++) {
                   if (z) small.appendChild(document.createElement("br"));
                   small.appendChild(document.createTextNode(text[z]));
@@ -740,7 +761,6 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
       }
     }
   };
-
 
   /* ****************************************************************
    * Insert text at the cursor
@@ -806,8 +826,18 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
         }
       } while (elem = elem.offsetParent);
 
-      if (this.VKI_isIE6) document.body.appendChild(this.VKI_iframe);
-      document.body.appendChild(this.VKI_keyboard);
+      var keyboardParentNode = document.body;
+      // If a location is specified, set the keyboard at the given location. Otherwise append the keyboard at document body
+      if (this.VKI_keyboardLocation !== null) {
+        var element = document.getElementById(this.VKI_keyboardLocation);
+        if (element === null) {
+          alert("The given id '" + this.VKI_keyboardLocation + "'  to append the keyboard is not valid");
+        } else {
+          keyboardParentNode = element;
+        }
+      }
+      if (this.VKI_isIE6) keyboardParentNode.appendChild(this.VKI_iframe);
+      keyboardParentNode.appendChild(this.VKI_keyboard);
       this.VKI_keyboard.style.position = this.VKI_target.keyboardPosition;
       if (this.VKI_isOpera) this.VKI_keyboard.reflow();
 
@@ -840,12 +870,28 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
    *
    */
   this.VKI_position = function(force) {
-    if (!self.VKI_relative) {
-      self.VKI_keyboard.style.position = 'fixed';
-      self.VKI_keyboard.style.bottom = '0px';
-      self.VKI_keyboard.style.left = '0px';
-      self.VKI_keyboard.style.width = '100%';
+    // Manage the different type of position "relative", "fixed", "relative-bottom"
+    if (self.VKI_positionOption.type === "fixed") {
+      self.VKI_keyboard.style.position = "fixed";
+      self.VKI_keyboard.style.bottom = self.VKI_positionOption.bottom || '0px';
+      self.VKI_keyboard.style.left = self.VKI_positionOption.left || '0px';
+      self.VKI_keyboard.style.width = self.VKI_positionOption.width || '100%';
       return;
+    } else if (self.VKI_positionOption.type === "relative-bottom") {
+      self.VKI_keyboard.style.position = "relative";
+      self.VKI_keyboard.style['margin-top'] = self.VKI_positionOption.top || '0px';
+      self.VKI_keyboard.style['margin-bottom'] = self.VKI_positionOption.bottom || '0px';
+      self.VKI_keyboard.style['margin-left'] = self.VKI_positionOption.left || '0px';
+      self.VKI_keyboard.style.width = self.VKI_positionOption.width || '100%';
+      return;
+    } else {
+      if (!self.VKI_relative) {
+        self.VKI_keyboard.style.position = "fixed";
+        self.VKI_keyboard.style.bottom = self.VKI_positionOption.bottom || '0px';
+        self.VKI_keyboard.style.left = self.VKI_positionOption.left || '0px';
+        self.VKI_keyboard.style.width = self.VKI_positionOption.width || '100%';
+        return;
+      }
     }
     if (self.VKI_target) {
       var kPos = VKI_findPos(self.VKI_keyboard), wDim = VKI_innerDimensions(), sDis = VKI_scrollDist();
@@ -987,12 +1033,11 @@ var VKI = function(customConfig, layout, deadKeys, keyInputCallback) {
   //   for (var x = 0, elem; elem = inputElems[x++];)
   //     for (var y = 0, ex; ex = elem[y++];)
   //       if (ex.nodeName == "TEXTAREA" || ex.type == "text" || ex.type == "password")
-    //      if (ex.className.indexOf("keyboardInput") > -1) self.VKI_attach(ex);
+  //      if (ex.className.indexOf("keyboardInput") > -1) self.VKI_attach(ex);
 
   //   VKI_addListener(document.documentElement, 'click', function(e) { self.VKI_close(true); }, false);
   // }
   // VKI_addListener(window, 'load', VKI_buildKeyboardInputs, false);
-
 
   return self;
 };
@@ -1012,7 +1057,7 @@ angular.module('angular-virtual-keyboard', [])
 				[['Shift', 'Shift'], ['z', 'Z', '\u00e6', '\u00c6'], ['x', 'X'], ['c', 'C', '\u00a9', '\u00a2'], ['v', 'V'], ['b', 'B'], ['n', 'N', '\u00f1', '\u00d1'], ['m', 'M', '\u00b5'], [',', '<', '\u00e7', '\u00c7'], ['.', '>'], ['/', '?', '\u00bf'], ['Shift', 'Shift']],
 				[[' ', ' ', ' ', ' '], ['Alt', 'Alt']]
 			],
-		'lang': ['en'] }
+			'lang': ['en'] }
 	},
 	// deadkey
 	'deadkey': {
@@ -1074,8 +1119,15 @@ angular.module('angular-virtual-keyboard', [])
 			config.relative = config.relative === false ? false : VKI_CONFIG.relative;
 			config.keyCenter = config.keyCenter || VKI_CONFIG.keyCenter;
 			config.sizeAdj = config.sizeAdj === false ? false : VKI_CONFIG.sizeAdj;
-
-			var vki = new VKI(config, VKI_CONFIG.layout, VKI_CONFIG.deadkey, inputCallback);
+			config.numberPad = config.numberPad || VKI_CONFIG.numberPad;
+			config.showNumberPad = config.showNumberPad || VKI_CONFIG.showNumberPad;
+			config.showDeadBox = config.showDeadBox || VKI_CONFIG.showDeadBox;
+			config.activeTab = config.activeTab || VKI_CONFIG.activeTab;
+			config.displayVkiHeaderAction = config.displayVkiHeaderAction || VKI_CONFIG.displayVkiHeaderAction;
+			config.enterSubmit = config.enterSubmit || VKI_CONFIG.enterSubmit;
+			config.position = config.position || VKI_CONFIG.position;
+			config.keyboardLocation = config.keyboardLocation || VKI_CONFIG.keyboardLocation;
+			var vki = new VKI(config, VKI_CONFIG.layout, VKI_CONFIG.numPadLayout, VKI_CONFIG.deadkey, inputCallback);
 			vki.attachVki(element);
 		}
 	};
@@ -1098,8 +1150,8 @@ angular.module('angular-virtual-keyboard', [])
 				var UAParser = $injector.get('UAParser');
 				var results = new UAParser().getResult();
 				var isMobile = results.device.type === 'mobile' || results.device.type === 'tablet';
-                isMobile = isMobile || (results.os && (results.os.name === 'Android'));
-                isMobile = isMobile || (results.os && (results.os.name === 'iOS'));
+				isMobile = isMobile || (results.os && (results.os.name === 'Android'));
+				isMobile = isMobile || (results.os && (results.os.name === 'iOS'));
 				if (isMobile && scope.config.showInMobile !== true) {
 					return;
 				}
@@ -1112,6 +1164,34 @@ angular.module('angular-virtual-keyboard', [])
 			});
 		}
 	};
-}]);
+}]).directive('ngStaticVirtualKeyboard', ['ngVirtualKeyboardService', '$timeout', '$injector',
+function(ngVirtualKeyboardService, $timeout, $injector) {
+	return {
+		restrict: 'A',
+		require : '?ngModel',
+		link: function(scope, elements, attrs, ngModelCtrl) {
+			if(!ngModelCtrl){
+				return;
+			}
 
+			// Don't show virtual keyboard in mobile devices (default)
+			if ($injector.has('UAParser')) {
+				var UAParser = $injector.get('UAParser');
+				var results = new UAParser().getResult();
+				var isMobile = results.device.type === 'mobile' || results.device.type === 'tablet';
+				isMobile = isMobile || (results.os && (results.os.name === 'Android'));
+				isMobile = isMobile || (results.os && (results.os.name === 'iOS'));
+				if (isMobile) {
+					return;
+				}
+			}
+
+			ngVirtualKeyboardService.attach(elements[0], {} , function() {
+				$timeout(function() {
+					ngModelCtrl.$setViewValue(elements[0].value);
+				});
+			});
+		}
+	};
+}]);
 })(angular);
