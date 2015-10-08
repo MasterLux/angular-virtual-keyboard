@@ -833,7 +833,6 @@ var VKI = function(customConfig, layout, numPadLayout, deadKeys, keyInputCallbac
 
       this.VKI_position(true);
       if (self.VKI_isMoz || self.VKI_isWebKit) this.VKI_position(true);
-      this.VKI_target.blur();
       this.VKI_target.focus();
 
       this.VKI_closeOthers();
